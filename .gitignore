@@ -59,6 +59,8 @@ tests/**/gcc-release/
 # XCode 4
 xcuserdata
 *.xcworkspace
+*.xcscheme
+xcshareddata/
 
 # Code::Blocks
 *.depend
