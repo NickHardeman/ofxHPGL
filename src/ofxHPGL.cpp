@@ -54,6 +54,103 @@ void ofxHPGL::setup( Settings asettings ) {
 }
 
 //--------------------------------------------------------------
+bool ofxHPGL::load( string aFilePath ) {
+    ofxXmlSettings txml;
+    bool bOk = txml.load( aFilePath );
+    if( bOk ) {
+        clear();
+        float inw = txml.getAttribute("screen", "width", 0.0 );
+        float inh = txml.getAttribute("screen", "height", 0.0 );
+        setInputWidth( inw );
+        setInputHeight( inh );
+        string tcname = "command";
+        int numTags = txml.getNumTags(tcname);
+        for( int i = 0; i < numTags; i++ ) {
+            int ttype = txml.getAttribute(tcname, "type", -1, i );
+            if( ttype == ofxHPGLCommand::PEN ) {
+                int penIndex = txml.getAttribute(tcname, "penIndex", 1, i );
+                setPen( penIndex );
+            } else if(ttype == ofxHPGLCommand::RECTANGLE ) {
+                ofRectangle trect;
+                trect.x = txml.getAttribute(tcname, "x", 0.0, i );
+                trect.y = txml.getAttribute(tcname, "y", 0.0, i );
+                trect.width = txml.getAttribute(tcname, "width", 0.0, i );
+                trect.height = txml.getAttribute(tcname, "height", 0.0, i );
+                rectangle( trect.x, trect.y, trect.width, trect.height );
+            } else if( ttype == ofxHPGLCommand::CIRCLE ) {
+                circle(txml.getAttribute(tcname, "x", 0.0, i ),
+                          txml.getAttribute(tcname, "y", 0.0, i ),
+                          txml.getAttribute(tcname, "radius", 0.0, i ));
+            } else if( ttype == ofxHPGLCommand::SHAPE ) {
+                if( txml.pushTag(tcname, i )) {
+                    int numPTags = txml.getNumTags( "point" );
+                    ofPolyline tpoly;
+                    for( int j = 0; j < numPTags; j++ ) {
+                        tpoly.addVertex(
+                                        txml.getAttribute("point", "x", 0.0, j ),
+                                        txml.getAttribute("point", "y", 0.0, j )
+                        );
+                    }
+                    
+                    polyline( tpoly );
+                    
+                    txml.popTag();
+                }
+            }
+        }
+    }
+    return bOk;
+}
+
+//--------------------------------------------------------------
+bool ofxHPGL::save( string aFilePath ) {
+    
+    ofFile tfile( aFilePath );
+    string filepath = aFilePath;
+    if( tfile.getExtension() != "xml" ) {
+        filepath = tfile.getEnclosingDirectory()+"/"+tfile.getBaseName()+".xml";
+    }
+    
+    cout << "ofxHPGL :: save : " << filepath << endl;
+    
+    ofxXmlSettings txml;
+    
+    txml.addTag("screen");
+    txml.addAttribute("screen", "width", _inWidth, 0 );
+    txml.addAttribute("screen", "height", _inHeight, 0 );
+    
+    for( int i = 0; i < commands.size(); i++ ) {
+        ofxHPGLCommand& tc = commands[i];
+        string tname = "command";
+        int ttag = txml.addTag(tname);
+        txml.addAttribute(tname, "type", tc.type, ttag );
+        
+        if( tc.type == ofxHPGLCommand::PEN ) {
+            txml.addAttribute(tname, "penIndex", tc.penIndex, ttag );
+        } else if( tc.type == ofxHPGLCommand::RECTANGLE ) {
+            txml.addAttribute(tname, "x", tc.pos.x, ttag );
+            txml.addAttribute(tname, "y", tc.pos.y, ttag );
+            txml.addAttribute(tname, "width", tc.width, ttag );
+            txml.addAttribute(tname, "height", tc.height, ttag );
+        } else if( tc.type == ofxHPGLCommand::CIRCLE ) {
+            txml.addAttribute(tname, "x", tc.pos.x, ttag );
+            txml.addAttribute(tname, "y", tc.pos.y, ttag );
+            txml.addAttribute(tname, "radius", tc.radius, ttag );
+            
+        } else if( tc.type == ofxHPGLCommand::SHAPE ) {
+            if( txml.pushTag( tname, i )) {
+                for( int j = 0; j < tc.polyline.size(); j++ ) {
+                    int ptag = txml.addTag("point");
+                    txml.addAttribute("point", "x", tc.polyline[j].x, ptag );
+                    txml.addAttribute("point", "y", tc.polyline[j].y, ptag );
+                }
+            } txml.popTag();
+        }
+    }
+    return txml.save( filepath );
+}
+
+//--------------------------------------------------------------
 void ofxHPGL::setInputWidth( float aw ) {
     _inWidth = aw;
 }
@@ -158,7 +255,7 @@ void ofxHPGL::draw() {
 //            cout << i << " - Setting the pen to " << com.penIndex << endl;
 //        }
 //    }
-    ofSetColor( 60 );
+    
     for( int i = 0; i < drawPolys.size(); i++ ) {
         drawPolys[i].draw();
     }
@@ -184,8 +281,9 @@ void ofxHPGL::circle( float ax, float ay, float aradius ) {
     
     drawPolys.push_back( tpoly );
 //    scalePoly( tpoly );
-    
-    commands.push_back( ofxHPGLCommand(tpoly) );
+    ofxHPGLCommand tc;
+    tc.circle( ax, ay, aradius );
+    commands.push_back( tc );
 }
 
 //--------------------------------------------------------------
@@ -201,7 +299,9 @@ void ofxHPGL::rectangle( ofRectangle arect ) {
     drawPolys.push_back( tpoly );
 //    scalePoly( tpoly );
     
-    commands.push_back( ofxHPGLCommand(tpoly) );
+    ofxHPGLCommand tc;
+    tc.rectangle( arect.x, arect.y, arect.width, arect.height );
+    commands.push_back( tc );
 }
 
 //--------------------------------------------------------------
@@ -242,6 +342,8 @@ void ofxHPGL::triangle( ofVec2f ap1, ofVec2f ap2, ofVec2f ap3 ) {
 
 //--------------------------------------------------------------
 void ofxHPGL::polyline( ofPolyline aline ) {
+    if( !aline.size() ) return;
+    
     ofPolyline tpoly = aline;
     
     drawPolys.push_back( tpoly );
@@ -263,6 +365,14 @@ void ofxHPGL::setPen( int aPenIndex ) {
         com.setPen( penIndex );
         commands.push_back( com );
     }
+}
+
+//--------------------------------------------------------------
+ofVec2f ofxHPGL::getPrinterPosFromInput( ofVec2f aInput, ofRectangle aDestRect ) {
+    ofVec2f nvert;
+    nvert.x = ofMap( aInput.x, 0, _inWidth, 0, aDestRect.width, true );
+    nvert.y = ofMap( aInput.y, 0, _inHeight, aDestRect.height, 0, true );
+    return nvert;
 }
 
 //--------------------------------------------------------------
@@ -297,6 +407,8 @@ void ofxHPGL::print() {
     }
     
     ofRectangle destRect = getHardClipLimits();
+    float dscalex = destRect.width / _inWidth;
+    float dscaley = destRect.height / _inHeight;
 //    addCommand( getCommand("SP", penIndex ));
     
     for( int i = 0; i < commands.size(); i++ ) {
@@ -307,10 +419,12 @@ void ofxHPGL::print() {
             
             for( int j = 0; j < verts.size(); j++ ) {
                 // move the verts into the right place for the plotter //
-                ofVec2f nvert;
+//                ofVec2f nvert;
 //                nvert.x = ofMap( verts[j].x, 0, _inWidth, destRect.width, 0, true );
-                nvert.x = ofMap( verts[j].x, 0, _inWidth, 0, destRect.width, true );
-                nvert.y = ofMap( verts[j].y, 0, _inHeight, destRect.height, 0, true );
+//                nvert.x = ofMap( verts[j].x, 0, _inWidth, 0, destRect.width, true );
+//                nvert.y = ofMap( verts[j].y, 0, _inHeight, destRect.height, 0, true );
+                
+                ofVec2f nvert = getPrinterPosFromInput( verts[j], destRect );
                 
                 if( j == 0 ) {
                     addCommand(getCommand("PU", (int)nvert.x, (int)nvert.y ));
@@ -322,6 +436,21 @@ void ofxHPGL::print() {
         } else if( com.type == ofxHPGLCommand::PEN ) {
             cout << i << " - Setting the pen to " << com.penIndex << endl;
             addCommand( getCommand("SP", com.penIndex ));
+        } else if( com.type == ofxHPGLCommand::CIRCLE ) {
+//            PU1500,1500;
+//            CI500;
+            ofVec2f nvert = getPrinterPosFromInput( ofVec2f(com.pos.x, com.pos.y), destRect );
+            addCommand( getCommand("PU", nvert.x, nvert.y ));
+            addCommand( getCommand("CI", com.radius*dscalex ));
+            addCommand("PU;");
+        } else if( com.type == ofxHPGLCommand::RECTANGLE ) {
+//            RA (Rectangle Absolute - Filled, from current position to diagonal x,y):
+//            EA (rEctangle Absolute - Unfilled, from current position to diagonal x,y):
+//            EA x, y;
+            ofVec2f nvert = getPrinterPosFromInput( ofVec2f(com.pos.x, com.pos.y), destRect );
+            addCommand( getCommand("PU", nvert.x, nvert.y ));
+            addCommand( getCommand("EA", nvert.x+com.width*dscalex, nvert.y+com.height*dscaley ));
+            addCommand( "PU;" );
         }
     }
     

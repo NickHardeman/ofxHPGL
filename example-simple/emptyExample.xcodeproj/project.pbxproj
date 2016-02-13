@@ -7,6 +7,10 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		2EC773D01C6DA495001AD399 /* tinyxml.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2EC773C91C6DA495001AD399 /* tinyxml.cpp */; };
+		2EC773D11C6DA495001AD399 /* tinyxmlerror.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2EC773CB1C6DA495001AD399 /* tinyxmlerror.cpp */; };
+		2EC773D21C6DA495001AD399 /* tinyxmlparser.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2EC773CC1C6DA495001AD399 /* tinyxmlparser.cpp */; };
+		2EC773D31C6DA495001AD399 /* ofxXmlSettings.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2EC773CE1C6DA495001AD399 /* ofxXmlSettings.cpp */; };
 		2ED1B1271C640045007A0AAE /* ofxHPGL.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2ED1B1251C640045007A0AAE /* ofxHPGL.cpp */; };
 		E4328149138ABC9F0047C5CB /* openFrameworksDebug.a in Frameworks */ = {isa = PBXBuildFile; fileRef = E4328148138ABC890047C5CB /* openFrameworksDebug.a */; };
 		E4B69E200A3A1BDC003C02F2 /* main.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E4B69E1D0A3A1BDC003C02F2 /* main.cpp */; };
@@ -43,6 +47,12 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		2EC773C91C6DA495001AD399 /* tinyxml.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = tinyxml.cpp; sourceTree = "<group>"; };
+		2EC773CA1C6DA495001AD399 /* tinyxml.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = tinyxml.h; sourceTree = "<group>"; };
+		2EC773CB1C6DA495001AD399 /* tinyxmlerror.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = tinyxmlerror.cpp; sourceTree = "<group>"; };
+		2EC773CC1C6DA495001AD399 /* tinyxmlparser.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = tinyxmlparser.cpp; sourceTree = "<group>"; };
+		2EC773CE1C6DA495001AD399 /* ofxXmlSettings.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = ofxXmlSettings.cpp; sourceTree = "<group>"; };
+		2EC773CF1C6DA495001AD399 /* ofxXmlSettings.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = ofxXmlSettings.h; sourceTree = "<group>"; };
 		2ED1B1251C640045007A0AAE /* ofxHPGL.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = ofxHPGL.cpp; sourceTree = "<group>"; };
 		2ED1B1261C640045007A0AAE /* ofxHPGL.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = ofxHPGL.h; sourceTree = "<group>"; };
 		E4328143138ABC890047C5CB /* openFrameworksLib.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = openFrameworksLib.xcodeproj; path = ../../../libs/openFrameworksCompiled/project/osx/openFrameworksLib.xcodeproj; sourceTree = SOURCE_ROOT; };
@@ -67,6 +77,36 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		2EC773C71C6DA495001AD399 /* ofxXmlSettings */ = {
+			isa = PBXGroup;
+			children = (
+				2EC773C81C6DA495001AD399 /* libs */,
+				2EC773CD1C6DA495001AD399 /* src */,
+			);
+			name = ofxXmlSettings;
+			path = ../../ofxXmlSettings;
+			sourceTree = "<group>";
+		};
+		2EC773C81C6DA495001AD399 /* libs */ = {
+			isa = PBXGroup;
+			children = (
+				2EC773C91C6DA495001AD399 /* tinyxml.cpp */,
+				2EC773CA1C6DA495001AD399 /* tinyxml.h */,
+				2EC773CB1C6DA495001AD399 /* tinyxmlerror.cpp */,
+				2EC773CC1C6DA495001AD399 /* tinyxmlparser.cpp */,
+			);
+			path = libs;
+			sourceTree = "<group>";
+		};
+		2EC773CD1C6DA495001AD399 /* src */ = {
+			isa = PBXGroup;
+			children = (
+				2EC773CE1C6DA495001AD399 /* ofxXmlSettings.cpp */,
+				2EC773CF1C6DA495001AD399 /* ofxXmlSettings.h */,
+			);
+			path = src;
+			sourceTree = "<group>";
+		};
 		2ED1B1231C64001D007A0AAE /* ofxHPGL */ = {
 			isa = PBXGroup;
 			children = (
@@ -88,6 +128,7 @@
 		BB4B014C10F69532006C3DED /* addons */ = {
 			isa = PBXGroup;
 			children = (
+				2EC773C71C6DA495001AD399 /* ofxXmlSettings */,
 				2ED1B1231C64001D007A0AAE /* ofxHPGL */,
 			);
 			name = addons;
@@ -220,8 +261,12 @@
 			buildActionMask = 2147483647;
 			files = (
 				E4B69E200A3A1BDC003C02F2 /* main.cpp in Sources */,
+				2EC773D01C6DA495001AD399 /* tinyxml.cpp in Sources */,
 				2ED1B1271C640045007A0AAE /* ofxHPGL.cpp in Sources */,
+				2EC773D11C6DA495001AD399 /* tinyxmlerror.cpp in Sources */,
+				2EC773D21C6DA495001AD399 /* tinyxmlparser.cpp in Sources */,
 				E4B69E210A3A1BDC003C02F2 /* ofApp.cpp in Sources */,
+				2EC773D31C6DA495001AD399 /* ofxXmlSettings.cpp in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

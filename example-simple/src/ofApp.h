@@ -22,5 +22,6 @@ public:
     void gotMessage(ofMessage msg);
     
     ofxHPGL hp;
-    vector< ofPolyline > polylines;
+//    vector< ofPolyline > polylines;
+    ofPolyline polyline;
 };

@@ -7,6 +7,7 @@
 
 #pragma once
 #include "ofMain.h"
+#include "ofxXmlSettings.h"
 
 class ofxHPGLSerialCommand {
 public:
@@ -46,7 +47,9 @@ class ofxHPGLCommand {
 public:
     enum CommandType {
         SHAPE = 0,
-        PEN
+        PEN,
+        CIRCLE,
+        RECTANGLE
     };
     
     ofxHPGLCommand() {
@@ -59,12 +62,30 @@ public:
         polyline    = aline;
     }
     
+    void circle( float ax, float ay, float aradius ) {
+        pos.set( ax, ay );
+        type    = CIRCLE;
+        radius  = aradius;
+        
+    }
+    
+    void rectangle( float ax, float ay, float aw, float ah ) {
+        pos.set( ax, ay );
+        type    = RECTANGLE;
+        width   = aw;
+        height  = ah;
+        
+    }
+    
     void setPen( int aPen ) {
         type = PEN;
         penIndex = aPen;
     }
     
+    ofVec2f pos;
+    float radius;
     int penIndex;
+    float width, height;
     int type;
     ofPolyline polyline;
 };
@@ -93,6 +114,9 @@ public:
     void setup( string aPortName );
     void setup( Settings asettings );
     
+    bool load( string aFilePath );
+    bool save( string aFilePath );
+    
     void setInputWidth( float aw );
     void setInputHeight( float ah );
     
@@ -114,6 +138,8 @@ public:
     void polyline( ofPolyline aline );
     
     void setPen( int aPenIndex );
+    
+    ofVec2f getPrinterPosFromInput( ofVec2f aInput, ofRectangle aDestRect );
     
     void clear();
     void print();

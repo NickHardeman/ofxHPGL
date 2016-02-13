@@ -4,7 +4,7 @@
 void ofApp::setup() {
     hp.setup( "/dev/tty.usbserial-A10172HG" );
 //    hp.start();
-    hp.setPen( 1 );
+    hp.load("hpgl.xml");
     
 }
 
@@ -17,25 +17,31 @@ void ofApp::update() {
 //--------------------------------------------------------------
 void ofApp::draw(){
     hp.draw();
-    for( int i = 0; i < polylines.size(); i++ ) {
-        polylines[i].draw();
-    }
+    
+    polyline.draw();
+//    for( int i = 0; i < polylines.size(); i++ ) {
+//        polylines[i].draw();
+//    }
 }
 
 //--------------------------------------------------------------
 void ofApp::keyPressed(int key){
     if( key == 'p' ) {
         hp.clear();
-        for( int i = 0; i < polylines.size(); i++ ) {
-            hp.polyline( polylines[i] );
-        }
+//        for( int i = 0; i < polylines.size(); i++ ) {
+//            hp.polyline( polylines[i] );
+//        }
         hp.print();
 //        hp.addCommand( "OH;", true );
 //        cout << hp.getHardClipLimits() << endl;
     }
     if( key == 127 ) {
-        polylines.clear();
+        polyline.clear();
         hp.clear();
+    }
+    if( key == 's' ) {
+//        hp.save( ofGetTimestampString()+".xml" );
+        hp.save( "hpgl.xml" );
     }
 //    if( key == 'a' ) {
 //        cout << hp.getPenPosition() << endl;
@@ -54,18 +60,22 @@ void ofApp::mouseMoved(int x, int y){
 
 //--------------------------------------------------------------
 void ofApp::mouseDragged(int x, int y, int button){
-    if(polylines.size()) polylines.back().addVertex( x, y );
+    polyline.addVertex( x, y );
 }
 
 //--------------------------------------------------------------
 void ofApp::mousePressed(int x, int y, int button) {
-    polylines.push_back( ofPolyline() );
+//    polylines.push_back( ofPolyline() );
+    polyline.clear();
 }
 
 //--------------------------------------------------------------
 void ofApp::mouseReleased(int x, int y, int button){
-    if( polylines.size() && polylines.back().getPerimeter() > 10 ) {
-        polylines.back() = polylines.back().getResampledBySpacing( 8 );
+    if( polyline.getPerimeter() > 10 ) {
+        polyline = polyline.getResampledBySpacing( 8 );
+        
+        hp.polyline( polyline );
+        polyline.clear();
     }
 }
 
