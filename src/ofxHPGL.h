@@ -78,8 +78,8 @@ public:
     }
     
     void setPen( int aPen ) {
-        type = PEN;
-        penIndex = aPen;
+        type        = PEN;
+        penIndex    = aPen;
     }
     
     ofVec2f pos;
@@ -93,11 +93,13 @@ public:
 class ofxHPGL {
 public:
     
+    static bool shouldRemoveSentCommand( const ofxHPGLSerialCommand& ac );
+    
     class Settings {
     public:
         enum PaperSize {
-            PAPER_SIZE_A3 = 0,
-            PAPER_SIZE_A4
+            PAPER_SIZE_A3 = 1,
+            PAPER_SIZE_A4 = 4
         };
         
         Settings();
@@ -138,11 +140,15 @@ public:
     void polyline( ofPolyline aline );
     
     void setPen( int aPenIndex );
+    void setPaperSize( int aPaperSize );
     
     ofVec2f getPrinterPosFromInput( ofVec2f aInput, ofRectangle aDestRect );
     
     void clear();
     void print();
+    bool isPrinting();
+    void pause();
+    void resume();
     
     ofVec2f getPenPosition();
     int getPenStatus();
@@ -152,16 +158,18 @@ public:
     string getCommand( string aprefix, int ax );
     string getCommand( string aprefix, int ax, int ay );
     
+    void sendCommand( string astr );
+    
     ofSerial serial;
     
     string message;
     
-protected:
-//    void scalePoly( ofPolyline& apoly );
-    void sendCommand( string astr );
-    bool bthreadReceivedPrinterResponse;
-    
+    int getAvailBufferSize();
     void sendBlockingResponse( ofxHPGLSerialCommand& aCommand );
+    
+protected:
+    
+    bool bthreadReceivedPrinterResponse;
     
     vector< ofxHPGLSerialCommand > printerCommands;
     
@@ -172,8 +180,9 @@ protected:
     string serialIn;
     
     float _inWidth, _inHeight;
-//    ofVec2f _scale;
-    
+    bool bTryToConnectToPrinter;
+    unsigned int lastTryToConnectTime;
+    bool bPause;
 };
 
 
