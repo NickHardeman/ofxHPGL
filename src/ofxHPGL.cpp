@@ -64,6 +64,7 @@ void ofxHPGL::setup( Settings asettings ) {
 
 //--------------------------------------------------------------
 bool ofxHPGL::load( string aFilePath ) {
+    
     ofxXmlSettings txml;
     bool bOk = txml.load( aFilePath );
     if( bOk ) {
@@ -79,19 +80,30 @@ bool ofxHPGL::load( string aFilePath ) {
         for( int i = 0; i < numTags; i++ ) {
             int ttype = txml.getAttribute(tcname, "type", -1, i );
             if( ttype == ofxHPGLCommand::PEN ) {
-                int penIndex = txml.getAttribute(tcname, "penIndex", 1, i );
-                setPen( penIndex );
+                if( txml.pushTag(tcname, i )) {
+                    int penIndex = txml.getAttribute("pen", "index", 1, 0 );
+                    setPen( penIndex );
+                    txml.popTag();
+                }
             } else if(ttype == ofxHPGLCommand::RECTANGLE ) {
-                ofRectangle trect;
-                trect.x = txml.getAttribute(tcname, "x", 0.0, i );
-                trect.y = txml.getAttribute(tcname, "y", 0.0, i );
-                trect.width = txml.getAttribute(tcname, "width", 0.0, i );
-                trect.height = txml.getAttribute(tcname, "height", 0.0, i );
-                rectangle( trect.x, trect.y, trect.width, trect.height );
+                
+                if( txml.pushTag(tcname, i )) {
+                    ofRectangle trect;
+                    trect.x = txml.getAttribute("rect", "x", 0.0, 0 );
+                    trect.y = txml.getAttribute("rect", "y", 0.0, 0 );
+                    trect.width = txml.getAttribute("rect", "width", 0.0, 0 );
+                    trect.height = txml.getAttribute("rect", "height", 0.0, 0 );
+                    rectangle( trect.x, trect.y, trect.width, trect.height );
+                    txml.popTag();
+                }
+                
             } else if( ttype == ofxHPGLCommand::CIRCLE ) {
-                circle(txml.getAttribute(tcname, "x", 0.0, i ),
-                          txml.getAttribute(tcname, "y", 0.0, i ),
-                          txml.getAttribute(tcname, "radius", 0.0, i ));
+                if( txml.pushTag(tcname, i )) {
+                    circle(txml.getAttribute("circle", "x", 0.0, 0 ),
+                              txml.getAttribute("circle", "y", 0.0, 0 ),
+                              txml.getAttribute("circle", "radius", 0.0, 0 ));
+                    txml.popTag();
+                }
             } else if( ttype == ofxHPGLCommand::SHAPE ) {
                 if( txml.pushTag(tcname, i )) {
                     int numPTags = txml.getNumTags( "point" );
@@ -123,44 +135,53 @@ bool ofxHPGL::save( string aFilePath ) {
     }
     
     
-    ofxXmlSettings txml;
+    ofBuffer xmlBuff;
     
-    txml.addTag("screen");
-    txml.addAttribute("screen", "width", _inWidth < 1 ? ofGetWidth() : _inWidth, 0 );
-    txml.addAttribute("screen", "height", _inHeight < 1 ? ofGetHeight() : _inHeight, 0 );
+    string sw = ofToString( _inWidth < 1 ? ofGetWidth() : _inWidth, 2 );
+    string sh = ofToString( _inHeight < 1 ? ofGetHeight() : _inHeight, 2 );
+    xmlBuff.append( "<screen width=\""+sw+"\" height=\""+sh+"\" />\n" );
     
     for( int i = 0; i < commands.size(); i++ ) {
         ofxHPGLCommand& tc = commands[i];
-        string tname = "command";
-        int ttag = txml.addTag(tname);
-        txml.addAttribute(tname, "type", tc.type, ttag );
+        stringstream ss;
+        ss << "<command type=\"" << tc.type << "\" >" << endl;
         
         if( tc.type == ofxHPGLCommand::PEN ) {
-            txml.addAttribute(tname, "penIndex", tc.penIndex, ttag );
+            ss << "     ";
+            ss << "<pen index=\"" << tc.penIndex << "\" />" << endl;
         } else if( tc.type == ofxHPGLCommand::RECTANGLE ) {
-            txml.addAttribute(tname, "x", tc.pos.x, ttag );
-            txml.addAttribute(tname, "y", tc.pos.y, ttag );
-            txml.addAttribute(tname, "width", tc.width, ttag );
-            txml.addAttribute(tname, "height", tc.height, ttag );
+            ss << "     ";
+            ss << "<rect ";
+            ss << "x=\"" << tc.pos.x << "\" ";// << endl;
+            ss << "y=\"" << tc.pos.y << "\" ";// << endl;
+            ss << "width=\"" << tc.width << "\" ";// << endl;
+            ss << "height=\"" << tc.height << "\" ";// << endl;
+            ss << "/>" << endl;
         } else if( tc.type == ofxHPGLCommand::CIRCLE ) {
-            txml.addAttribute(tname, "x", tc.pos.x, ttag );
-            txml.addAttribute(tname, "y", tc.pos.y, ttag );
-            txml.addAttribute(tname, "radius", tc.radius, ttag );
+            
+            // tab it in //
+            ss << "     ";
+            ss << "<circle ";
+            ss << "x=\"" << tc.pos.x << "\" ";// << endl;
+            ss << "y=\"" << tc.pos.y << "\" ";// << endl;
+            ss << "radius=\"" << tc.radius << "\" ";// << endl;
+            ss << "/>" << endl;
+            
             
         } else if( tc.type == ofxHPGLCommand::SHAPE ) {
-            if( txml.pushTag( tname, i )) {
-                for( int j = 0; j < tc.polyline.size(); j++ ) {
-                    int ptag = txml.addTag("point");
-                    txml.addAttribute("point", "x", tc.polyline[j].x, ptag );
-                    txml.addAttribute("point", "y", tc.polyline[j].y, ptag );
-                }
-            } txml.popTag();
+            for( int j = 0; j < tc.polyline.size(); j++ ) {
+                ss << "     ";
+                ss << "<point x=\"" << tc.polyline[j].x << "\" y=\"" << tc.polyline[j].y << "\" />" << endl;
+            }
         }
+        ss << "</command>" << endl;
+        xmlBuff.append( ss.str() );
     }
     
     cout << "ofxHPGL :: save : " << filepath << endl;
     
-    return txml.save( filepath );
+    
+    return ofBufferToFile( filepath, xmlBuff );
 }
 
 //--------------------------------------------------------------
@@ -335,6 +356,8 @@ void ofxHPGL::setPen( int aPenIndex ) {
         return;
     }
     
+    cout << "setting the pen to " << aPenIndex << endl;
+    
     if( aPenIndex != penIndex ) {
         penIndex = aPenIndex;
         ofxHPGLCommand com;
@@ -382,7 +405,7 @@ void ofxHPGL::print() {
     
     // clear the incoming commands to the printer //
     addCommand("IN;");
-    addCommand("DF;");
+//    addCommand("DF;");
 //    addCommand("PU;");
 //    addCommand("SC;");
     addCommand("PA;");
