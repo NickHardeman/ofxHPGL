@@ -55,11 +55,13 @@ public:
     ofxHPGLCommand() {
         penIndex    = -1;
         type        = SHAPE;
+        bFilled     = false;
     }
     ofxHPGLCommand( ofPolyline aline ) {
         penIndex    = -1;
         type        = SHAPE;
         polyline    = aline;
+        bFilled     = false;
     }
     
     void circle( float ax, float ay, float aradius ) {
@@ -88,6 +90,7 @@ public:
     float width, height;
     int type;
     ofPolyline polyline;
+    bool bFilled;
 };
 
 class ofxHPGL {
@@ -142,7 +145,8 @@ public:
     void setPen( int aPenIndex );
     void setPaperSize( int aPaperSize );
     
-    ofVec2f getPrinterPosFromInput( ofVec2f aInput, ofRectangle aDestRect );
+    ofVec2f getPrinterPosFromInput( ofVec2f aInput );
+    ofVec2f getPrinterPosFromInput( ofVec2f aInput, ofRectangle& aDestRect );
     
     void clear();
     void print();
@@ -183,6 +187,8 @@ protected:
     bool bTryToConnectToPrinter;
     unsigned int lastTryToConnectTime;
     bool bPause;
+    
+    ofRectangle _clipLimitRect;
 };
 
 

@@ -11,7 +11,7 @@
 ofxHPGL::Settings::Settings() {
     paperSize           = PAPER_SIZE_A3;
     serialDevicePath    = "";
-    baud = 9600;
+    baud                = 9600;
 }
 
 //--------------------------------------------------------------
@@ -65,62 +65,128 @@ void ofxHPGL::setup( Settings asettings ) {
 //--------------------------------------------------------------
 bool ofxHPGL::load( string aFilePath ) {
     
-    ofxXmlSettings txml;
-    bool bOk = txml.load( aFilePath );
-    if( bOk ) {
-        clear();
-        float inw = txml.getAttribute("screen", "width", 0.0 );
-        float inh = txml.getAttribute("screen", "height", 0.0 );
-        if( inw < 1 ) inw = ofGetWidth();
-        if( inh < 1 ) inh = ofGetHeight();
-        setInputWidth( inw );
-        setInputHeight( inh );
-        string tcname = "command";
-        int numTags = txml.getNumTags(tcname);
-        for( int i = 0; i < numTags; i++ ) {
-            int ttype = txml.getAttribute(tcname, "type", -1, i );
-            if( ttype == ofxHPGLCommand::PEN ) {
-                if( txml.pushTag(tcname, i )) {
-                    int penIndex = txml.getAttribute("pen", "index", 1, 0 );
-                    setPen( penIndex );
-                    txml.popTag();
+    ofFile tfile( aFilePath );
+    
+    bool bOk = false;
+    
+    if( tfile.getExtension() == "ofxhpgl" ) {
+        ofBuffer tbuff = ofBufferFromFile( aFilePath );
+        bOk = tbuff.size() > 0;
+        if( bOk ) {
+            ofBuffer::Lines tlines = tbuff.getLines();
+            for( auto& tline : tlines ) {
+//                cout << tline << endl;
+                if( tline.size() < 3 ) continue;
+                unsigned char c1 = tline[0];
+                unsigned char c2 = tline[1];
+                if( c1 == 'I' && c2 == 'N' ) {
+                    string nstr = tline.substr(2);
+                    vector< string > tvals = ofSplitString( nstr, "," );
+                    if( tvals.size() == 2 ) {
+                        setInputWidth( ofToFloat( tvals[0] ));
+                        setInputHeight( ofToFloat( tvals[1] ));
+                    }
+                } else if( c1 == 'P' && c2 == 'S' ) {
+                    // setting the paper size //
+//                    int val = tline[2];
+//                    setPaperSize( val );
+                } else if( (c1 == 'C' && c2 == 'I') || (c1 == 'W' && c2 == 'G') ) {
+                    string nstr = tline.substr(2);
+                    vector< string > tvals = ofSplitString( nstr, "," );
+                    if( tvals.size() == 3 ) {
+                        circle( ofToFloat(tvals[0]), ofToFloat(tvals[1]), ofToFloat(tvals[2]) );
+                        if( c1 == 'W' && c2 == 'G' ) {
+                            commands.back().bFilled = true;
+                        }
+                    }
+                } else if( (c1 == 'R' && c2 == 'A') || (c1 == 'E' && c2 == 'A') ) {
+                    // ss<<"EA"<<tc.pos.x<<","<<tc.pos.y<<","<<tc.width<<tc.height;//<<";";
+                    string nstr = tline.substr(2);
+                    vector< string > tvals = ofSplitString( nstr, "," );
+                    if( tvals.size() == 4 ) {
+                        rectangle( ofToFloat(tvals[0]), ofToFloat(tvals[1]), ofToFloat(tvals[2]), ofToFloat(tvals[3]));
+                        if( c1 == 'R' && c2 == 'A' ) {
+                            commands.back().bFilled = true;
+                        }
+                    }
+                } else if( c1 == 'P' && c2 == 'L' ) {
+                    string nstr = tline.substr(2);
+                    vector< string > tvals = ofSplitString( nstr, "," );
+                    if( tvals.size() >= 2 ) {
+                        ofPolyline tpoly;
+                        int tsize = tvals.size();
+                        for( int k = 0; k < tsize; k+=2 ) {
+                            tpoly.addVertex( ofToFloat(tvals[k]), ofToFloat(tvals[k+1]) );
+                        }
+                        polyline( tpoly );
+                        
+                    }
                 }
-            } else if(ttype == ofxHPGLCommand::RECTANGLE ) {
                 
-                if( txml.pushTag(tcname, i )) {
-                    ofRectangle trect;
-                    trect.x = txml.getAttribute("rect", "x", 0.0, 0 );
-                    trect.y = txml.getAttribute("rect", "y", 0.0, 0 );
-                    trect.width = txml.getAttribute("rect", "width", 0.0, 0 );
-                    trect.height = txml.getAttribute("rect", "height", 0.0, 0 );
-                    rectangle( trect.x, trect.y, trect.width, trect.height );
-                    txml.popTag();
-                }
-                
-            } else if( ttype == ofxHPGLCommand::CIRCLE ) {
-                if( txml.pushTag(tcname, i )) {
-                    circle(txml.getAttribute("circle", "x", 0.0, 0 ),
-                              txml.getAttribute("circle", "y", 0.0, 0 ),
-                              txml.getAttribute("circle", "radius", 0.0, 0 ));
-                    txml.popTag();
-                }
-            } else if( ttype == ofxHPGLCommand::SHAPE ) {
-                if( txml.pushTag(tcname, i )) {
-                    int numPTags = txml.getNumTags( "point" );
-                    ofPolyline tpoly;
-                    for( int j = 0; j < numPTags; j++ ) {
-                        tpoly.addVertex(
-                                        txml.getAttribute("point", "x", -1.f, j ),
-                                        txml.getAttribute("point", "y", -1.f, j )
-                        );
+            }
+        }
+    }
+    
+    if( tfile.getExtension() == "xml" ) {
+    
+        ofxXmlSettings txml;
+        bOk = txml.load( aFilePath );
+        if( bOk ) {
+            clear();
+            float inw = txml.getAttribute("screen", "width", 0.0 );
+            float inh = txml.getAttribute("screen", "height", 0.0 );
+            if( inw < 1 ) inw = ofGetWidth();
+            if( inh < 1 ) inh = ofGetHeight();
+            setInputWidth( inw );
+            setInputHeight( inh );
+            string tcname = "command";
+            int numTags = txml.getNumTags(tcname);
+            for( int i = 0; i < numTags; i++ ) {
+                int ttype = txml.getAttribute(tcname, "type", -1, i );
+                if( ttype == ofxHPGLCommand::PEN ) {
+                    if( txml.pushTag(tcname, i )) {
+                        int penIndex = txml.getAttribute("pen", "index", 1, 0 );
+                        setPen( penIndex );
+                        txml.popTag();
+                    }
+                } else if(ttype == ofxHPGLCommand::RECTANGLE ) {
+                    
+                    if( txml.pushTag(tcname, i )) {
+                        ofRectangle trect;
+                        trect.x = txml.getAttribute("rect", "x", 0.0, 0 );
+                        trect.y = txml.getAttribute("rect", "y", 0.0, 0 );
+                        trect.width = txml.getAttribute("rect", "width", 0.0, 0 );
+                        trect.height = txml.getAttribute("rect", "height", 0.0, 0 );
+                        rectangle( trect.x, trect.y, trect.width, trect.height );
+                        txml.popTag();
                     }
                     
-                    polyline( tpoly );
-                    
-                    txml.popTag();
+                } else if( ttype == ofxHPGLCommand::CIRCLE ) {
+                    if( txml.pushTag(tcname, i )) {
+                        circle(txml.getAttribute("circle", "x", 0.0, 0 ),
+                                  txml.getAttribute("circle", "y", 0.0, 0 ),
+                                  txml.getAttribute("circle", "radius", 0.0, 0 ));
+                        txml.popTag();
+                    }
+                } else if( ttype == ofxHPGLCommand::SHAPE ) {
+                    if( txml.pushTag(tcname, i )) {
+                        int numPTags = txml.getNumTags( "point" );
+                        ofPolyline tpoly;
+                        for( int j = 0; j < numPTags; j++ ) {
+                            tpoly.addVertex(
+                                            txml.getAttribute("point", "x", -1.f, j ),
+                                            txml.getAttribute("point", "y", -1.f, j )
+                            );
+                        }
+                        
+                        polyline( tpoly );
+                        
+                        txml.popTag();
+                    }
                 }
             }
         }
+        
     }
     return bOk;
 }
@@ -130,58 +196,114 @@ bool ofxHPGL::save( string aFilePath ) {
     
     ofFile tfile( aFilePath );
     string filepath = aFilePath;
-    if( tfile.getExtension() != "xml" ) {
-        filepath = tfile.getEnclosingDirectory()+"/"+tfile.getBaseName()+".xml";
-    }
     
+    if( _inWidth < 1 ) setInputWidth( ofGetWidth() );
+    if( _inHeight < 1 ) setInputHeight( ofGetHeight() );
     
-    ofBuffer xmlBuff;
-    
-    string sw = ofToString( _inWidth < 1 ? ofGetWidth() : _inWidth, 2 );
-    string sh = ofToString( _inHeight < 1 ? ofGetHeight() : _inHeight, 2 );
-    xmlBuff.append( "<screen width=\""+sw+"\" height=\""+sh+"\" />\n" );
-    
-    for( int i = 0; i < commands.size(); i++ ) {
-        ofxHPGLCommand& tc = commands[i];
-        stringstream ss;
-        ss << "<command type=\"" << tc.type << "\" >" << endl;
+    if( tfile.getExtension() == "ofxhpgl" ) {
+        ofBuffer tbuff;
+        // set the paper size //
+        stringstream tss;
+        tss<<"IN"<<_inWidth<<","<<_inHeight<<endl;
+        tbuff.append( tss.str() );
+        tss.clear();
+//        tss<<"PS"<<_settings.paperSize<<endl;
+//        tbuff.append( tss.str() );
+//        tss.clear();
         
-        if( tc.type == ofxHPGLCommand::PEN ) {
-            ss << "     ";
-            ss << "<pen index=\"" << tc.penIndex << "\" />" << endl;
-        } else if( tc.type == ofxHPGLCommand::RECTANGLE ) {
-            ss << "     ";
-            ss << "<rect ";
-            ss << "x=\"" << tc.pos.x << "\" ";// << endl;
-            ss << "y=\"" << tc.pos.y << "\" ";// << endl;
-            ss << "width=\"" << tc.width << "\" ";// << endl;
-            ss << "height=\"" << tc.height << "\" ";// << endl;
-            ss << "/>" << endl;
-        } else if( tc.type == ofxHPGLCommand::CIRCLE ) {
-            
-            // tab it in //
-            ss << "     ";
-            ss << "<circle ";
-            ss << "x=\"" << tc.pos.x << "\" ";// << endl;
-            ss << "y=\"" << tc.pos.y << "\" ";// << endl;
-            ss << "radius=\"" << tc.radius << "\" ";// << endl;
-            ss << "/>" << endl;
-            
-            
-        } else if( tc.type == ofxHPGLCommand::SHAPE ) {
-            for( int j = 0; j < tc.polyline.size(); j++ ) {
-                ss << "     ";
-                ss << "<point x=\"" << tc.polyline[j].x << "\" y=\"" << tc.polyline[j].y << "\" />" << endl;
+        int ncommands = commands.size();
+        for( int i = 0; i < ncommands; i++ ) {
+            ofxHPGLCommand& tc = commands[i];
+            stringstream ss;
+            if( tc.type == ofxHPGLCommand::PEN ) {
+                ss<<"SP"<< tc.penIndex;//<<";";
+            } else if( tc.type == ofxHPGLCommand::RECTANGLE ) {
+                if( tc.bFilled ) {
+                    ss<<"RA";
+                } else {
+                    ss<<"EA";
+                }
+                ss<<tc.pos.x<<","<<tc.pos.y<<","<<tc.width<<","<<tc.height;//<<";";
+            } else if( tc.type == ofxHPGLCommand::CIRCLE ) {
+                if( tc.bFilled ) {
+                    ss<<"WG";
+                } else {
+                    ss<<"CI";
+                }
+                ss<<tc.pos.x<<","<<tc.pos.y<<","<<tc.radius;
+            } else if( tc.type == ofxHPGLCommand::SHAPE ) {
+                int polySize = tc.polyline.size();
+                if( polySize >= 2 ) {
+                    ss<<"PL";
+                    for( int j = 0; j < polySize; j++ ) {
+                        ss<<tc.polyline[j].x<<","<<tc.polyline[j].y;
+                        if( j != polySize-1 ) {
+                            ss<<",";
+                        }
+                    }
+                    //ss<<";";
+                }
             }
+            ss<<endl;
+            tbuff.append(ss.str());
         }
-        ss << "</command>" << endl;
-        xmlBuff.append( ss.str() );
+        cout << "ofxHPGL :: ofxHPGL file type save : " << filepath << endl;
+        return ofBufferToFile( filepath, tbuff );
     }
     
-    cout << "ofxHPGL :: save : " << filepath << endl;
+    
+    if( tfile.getExtension() == "xml" ) {
+        ofBuffer xmlBuff;
+        
+        string sw = ofToString( _inWidth < 1 ? ofGetWidth() : _inWidth, 2 );
+        string sh = ofToString( _inHeight < 1 ? ofGetHeight() : _inHeight, 2 );
+        xmlBuff.append( "<screen width=\""+sw+"\" height=\""+sh+"\" />\n" );
+        
+        for( int i = 0; i < commands.size(); i++ ) {
+            ofxHPGLCommand& tc = commands[i];
+            stringstream ss;
+            ss << "<command type=\"" << tc.type << "\" >" << endl;
+            
+            if( tc.type == ofxHPGLCommand::PEN ) {
+                ss << "     ";
+                ss << "<pen index=\"" << tc.penIndex << "\" />" << endl;
+            } else if( tc.type == ofxHPGLCommand::RECTANGLE ) {
+                ss << "     ";
+                ss << "<rect ";
+                ss << "x=\"" << tc.pos.x << "\" ";// << endl;
+                ss << "y=\"" << tc.pos.y << "\" ";// << endl;
+                ss << "width=\"" << tc.width << "\" ";// << endl;
+                ss << "height=\"" << tc.height << "\" ";// << endl;
+                ss << "/>" << endl;
+            } else if( tc.type == ofxHPGLCommand::CIRCLE ) {
+                
+                // tab it in //
+                ss << "     ";
+                ss << "<circle ";
+                ss << "x=\"" << tc.pos.x << "\" ";// << endl;
+                ss << "y=\"" << tc.pos.y << "\" ";// << endl;
+                ss << "radius=\"" << tc.radius << "\" ";// << endl;
+                ss << "/>" << endl;
+                
+                
+            } else if( tc.type == ofxHPGLCommand::SHAPE ) {
+                for( int j = 0; j < tc.polyline.size(); j++ ) {
+                    ss << "     ";
+                    ss << "<point x=\"" << tc.polyline[j].x << "\" y=\"" << tc.polyline[j].y << "\" />" << endl;
+                }
+            }
+            ss << "</command>" << endl;
+            xmlBuff.append( ss.str() );
+        }
+        
+        cout << "ofxHPGL :: xml file type save : " << filepath << endl;
+        return ofBufferToFile( filepath, xmlBuff );
+    }
     
     
-    return ofBufferToFile( filepath, xmlBuff );
+    
+    return false;
+    
 }
 
 //--------------------------------------------------------------
@@ -315,9 +437,7 @@ void ofxHPGL::line( float ax, float ay, float ax2, float ay2 ) {
     tpoly.addVertex( ax, ay );
     tpoly.addVertex( ax2, ay2 );
     
-    drawPolys.push_back( tpoly );
-    
-    commands.push_back( ofxHPGLCommand(tpoly) );
+    polyline( tpoly );
 }
 
 //--------------------------------------------------------------
@@ -333,20 +453,15 @@ void ofxHPGL::triangle( ofVec2f ap1, ofVec2f ap2, ofVec2f ap3 ) {
     tpoly.addVertex( ap3 );
     tpoly.addVertex( ap1 );
     
-    drawPolys.push_back( tpoly );
-    
-    commands.push_back( ofxHPGLCommand(tpoly) );
+    polyline( tpoly );
 }
 
 //--------------------------------------------------------------
 void ofxHPGL::polyline( ofPolyline aline ) {
-    if( !aline.size() ) return;
-    
-    ofPolyline tpoly = aline;
-    
-    drawPolys.push_back( tpoly );
-    
-    commands.push_back( ofxHPGLCommand(tpoly) );
+    if( aline.size() < 2 ) return;
+    ofxHPGLCommand tcom( aline );
+    drawPolys.push_back( aline );
+    commands.push_back( tcom );
 }
 
 //--------------------------------------------------------------
@@ -368,11 +483,24 @@ void ofxHPGL::setPen( int aPenIndex ) {
 
 //--------------------------------------------------------------
 void ofxHPGL::setPaperSize( int aPaperSize ) {
+    _settings.paperSize = (Settings::PaperSize)aPaperSize;
+    // clear the clip rect, so when we query it later, it has adjusted to the new paper size //
+    _clipLimitRect.setWidth( 0 );
+    _clipLimitRect.setHeight( 0 );
     sendCommand( getCommand( "PS", aPaperSize ) );
 }
 
 //--------------------------------------------------------------
-ofVec2f ofxHPGL::getPrinterPosFromInput( ofVec2f aInput, ofRectangle aDestRect ) {
+ofVec2f ofxHPGL::getPrinterPosFromInput( ofVec2f aInput ) {
+    ofRectangle drect = getHardClipLimits();
+    ofVec2f nvert;
+    nvert.x = ofMap( aInput.x, 0, _inWidth, 0, drect.width, true );
+    nvert.y = ofMap( aInput.y, 0, _inHeight, drect.height, 0, true );
+    return nvert;
+}
+
+//--------------------------------------------------------------
+ofVec2f ofxHPGL::getPrinterPosFromInput( ofVec2f aInput, ofRectangle& aDestRect ) {
     ofVec2f nvert;
     nvert.x = ofMap( aInput.x, 0, _inWidth, 0, aDestRect.width, true );
     nvert.y = ofMap( aInput.y, 0, _inHeight, aDestRect.height, 0, true );
@@ -385,6 +513,7 @@ void ofxHPGL::clear() {
     commands.clear();
     printerCommands.clear();
     drawPolys.clear();
+    sendCommand( "PU;" );
 }
 
 // http://www.piclist.com/techref/language/hpgl/commands.htm
@@ -455,7 +584,7 @@ void ofxHPGL::print() {
                 ofVec2f nvert = getPrinterPosFromInput( verts[j], destRect );
                 
                 if( j == 0 ) {
-                    addCommand(getCommand("PU", (int)nvert.x, (int)nvert.y ));
+                    addCommand(getCommand("PU", nvert.x, nvert.y ));
                 }
 //                if( verts[j].x < 0  || verts[j].y < 0 || verts[j].x > _inWidth || verts[j].y > _inHeight ) {
 //                    addCommand( "PU;" );
@@ -463,7 +592,7 @@ void ofxHPGL::print() {
                     
 //                    cout << "inpos: "<< verts[j] << " outpos: " << nvert << " dest rect: " << destRect << " inw: " << _inWidth << " x " << _inHeight << endl;
                 
-                    addCommand(getCommand("PD", (int)nvert.x, (int)nvert.y ));
+                    addCommand(getCommand("PD", nvert.x, nvert.y ));
 //                }
                 
 //                ofDrawLine( verts[j].x, verts[j].y, verts[j+1].x, verts[j+1].y );
@@ -475,6 +604,8 @@ void ofxHPGL::print() {
         } else if( com.type == ofxHPGLCommand::CIRCLE ) {
 //            PU1500,1500;
 //            CI500;
+            // circle filled // ss<<"WG"<<tc.radius<<","<<0<<","<<360<<","<<5;
+            
             ofVec2f nvert = getPrinterPosFromInput( ofVec2f(com.pos.x, com.pos.y), destRect );
             addCommand( getCommand("PU", nvert.x, nvert.y ));
             addCommand( getCommand("CI", com.radius*dscalex ));
@@ -595,6 +726,11 @@ int ofxHPGL::getPenStatus() {
 
 //--------------------------------------------------------------
 ofRectangle ofxHPGL::getHardClipLimits() {
+    
+    if( _clipLimitRect.width > 0 && _clipLimitRect.height > 0 ) {
+        return _clipLimitRect;
+    }
+    
     ofRectangle trect;
     ofxHPGLSerialCommand com;
     com.command = "OH;";
