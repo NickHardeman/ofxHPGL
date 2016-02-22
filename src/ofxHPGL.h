@@ -123,6 +123,8 @@ public:
     
     void setInputWidth( float aw );
     void setInputHeight( float ah );
+    float getInputWidth() { return _inWidth; }
+    float getInputHeight() { return _inHeight; }
     
     bool start();
     void stop();

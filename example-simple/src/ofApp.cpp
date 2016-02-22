@@ -5,7 +5,6 @@ void ofApp::setup() {
     hp.setup( "/dev/tty.usbserial-A10172HG" );
 //    hp.start();
     hp.load("hpgl.xml");
-    
 }
 
 //--------------------------------------------------------------
