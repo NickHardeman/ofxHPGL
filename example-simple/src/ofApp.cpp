@@ -8,6 +8,12 @@ void ofApp::setup() {
     // if you want to change the input width or height ( defaults to window dimensions) //
     // be sure to call setInputWidth and setInputHeight to the width and height
     // of the input area that you will be using. The defaults are ofGetWidth() and ofGetHeight()
+    // see the example below //
+    int windowW = 1200;
+    int windowH = (float)windowW * (float)(11./17.);
+    ofSetWindowShape( windowW, windowH );
+    hp.setInputWidth( windowW );
+    hp.setInputHeight( windowH );
     
     hp.load("hpgl.ofxhpgl");
 }
