@@ -3,8 +3,13 @@
 //--------------------------------------------------------------
 void ofApp::setup() {
     hp.setup( "/dev/tty.usbserial-A10172HG" );
-//    hp.start();
-    hp.load("hpgl.xml");
+    
+    // notice in the main.cpp file that the window dimensions are the same ratio as 11x17
+    // if you want to change the input width or height ( defaults to window dimensions) //
+    // be sure to call setInputWidth and setInputHeight to the width and height
+    // of the input area that you will be using. The defaults are ofGetWidth() and ofGetHeight()
+    
+    hp.load("hpgl.ofxhpgl");
 }
 
 //--------------------------------------------------------------
@@ -16,35 +21,33 @@ void ofApp::update() {
 //--------------------------------------------------------------
 void ofApp::draw(){
     hp.draw();
-    
     polyline.draw();
-//    for( int i = 0; i < polylines.size(); i++ ) {
-//        polylines[i].draw();
-//    }
+    
+    ofSetColor( hp.isConnected() ? ofColor( 20, 230, 10 ) : ofColor( 220, 10, 50 ) );
+    ofDrawCircle( 20, 20, 4 );
+    
+    stringstream ss;
+    ss << "isConnected: " << (hp.isConnected() ? "yes" : "no") << endl;
+    ss << "save(s)" << endl;
+    ss << "print(p) " << endl;
+    ss << "clear(DEL)" << endl;
+    ofSetColor( 30 );
+    ofDrawBitmapString( ss.str(), 30, 22 );
 }
 
 //--------------------------------------------------------------
 void ofApp::keyPressed(int key){
     if( key == 'p' ) {
         hp.clear();
-//        for( int i = 0; i < polylines.size(); i++ ) {
-//            hp.polyline( polylines[i] );
-//        }
         hp.print();
-//        hp.addCommand( "OH;", true );
-//        cout << hp.getHardClipLimits() << endl;
     }
     if( key == 127 ) {
         polyline.clear();
         hp.clear();
     }
     if( key == 's' ) {
-//        hp.save( ofGetTimestampString()+".xml" );
-        hp.save( "hpgl.xml" );
+        hp.save( "hpgl.ofxhpgl" );
     }
-//    if( key == 'a' ) {
-//        cout << hp.getPenPosition() << endl;
-//    }
 }
 
 //--------------------------------------------------------------
@@ -64,7 +67,6 @@ void ofApp::mouseDragged(int x, int y, int button){
 
 //--------------------------------------------------------------
 void ofApp::mousePressed(int x, int y, int button) {
-//    polylines.push_back( ofPolyline() );
     polyline.clear();
 }
 
