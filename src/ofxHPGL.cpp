@@ -22,6 +22,14 @@ ofxHPGL::ofxHPGL() {
     bTryToConnectToPrinter  = false;
     lastTryToConnectTime    = 0;
     bPause      = false;
+    _bCapturing = false;
+    
+    penColors.push_back( ofFloatColor( 0.2, 0.2, 0.2 ));
+    penColors.push_back( ofFloatColor( 0.9, 0.1, 0.1 ));
+    penColors.push_back( ofFloatColor( 0.1, 0.1, 0.9 ));
+    penColors.push_back( ofFloatColor( 0.9, 0.92, 0.05 ));
+    penColors.push_back( ofFloatColor( 0.2, 0.9, 0.1 ));
+    penColors.push_back( ofFloatColor( 0.9, 0.2, 0.9 ));
 }
 
 //--------------------------------------------------------------
@@ -53,6 +61,7 @@ void ofxHPGL::setup( Settings asettings ) {
     if( _settings.serialDevicePath == "" ) {
         _settings.serialDevicePath = getSerialDevices()[0].getDevicePath();
     }
+    serial.listDevices();
     start();
     if( _inWidth < 10 ) {
         setInputWidth( ofGetWidth() );
@@ -70,6 +79,9 @@ bool ofxHPGL::load( string aFilePath ) {
     bool bOk = false;
     
     if( tfile.getExtension() == "ofxhpgl" ) {
+        bool bWasCaptureEnabled = isCapturing();
+        enableCapture();
+        
         ofBuffer tbuff = ofBufferFromFile( aFilePath );
         bOk = tbuff.size() > 0;
         if( bOk ) {
@@ -90,6 +102,17 @@ bool ofxHPGL::load( string aFilePath ) {
                     // setting the paper size //
 //                    int val = tline[2];
 //                    setPaperSize( val );
+                } else if( c1 == 'S' && c2 == 'P') {
+                    // setting the pen index //
+                    string nstr = tline.substr(2);
+                    int val = ofToInt( nstr );
+                    setPen( val );
+                } else if( c1 == 'V' && c2 == 'S' ) {
+                    // this value is a float, so go all the way to the end //
+                    string nstr = tline.substr(2);
+                    float tvelocity = ofToFloat( nstr );
+//                    cout << "setting the pen velocity from the loaded file: " << tvelocity << endl;
+                    setPenVelocity( tvelocity );
                 } else if( (c1 == 'C' && c2 == 'I') || (c1 == 'W' && c2 == 'G') ) {
                     string nstr = tline.substr(2);
                     vector< string > tvals = ofSplitString( nstr, "," );
@@ -125,6 +148,10 @@ bool ofxHPGL::load( string aFilePath ) {
                 
             }
         }
+        
+        if( !bWasCaptureEnabled ) {
+            disableCapture();
+        }
     }
     
     return bOk;
@@ -133,13 +160,16 @@ bool ofxHPGL::load( string aFilePath ) {
 //--------------------------------------------------------------
 bool ofxHPGL::save( string aFilePath ) {
     
-    ofFile tfile( aFilePath );
+//    ofFile tfile( aFilePath );
     string filepath = aFilePath;
+    if( !ofIsStringInString(aFilePath, ".ofxhpgl")) {
+        filepath += ".ofxhpgl";
+    }
     
     if( _inWidth < 1 ) setInputWidth( ofGetWidth() );
     if( _inHeight < 1 ) setInputHeight( ofGetHeight() );
     
-    if( tfile.getExtension() == "ofxhpgl" ) {
+    if( ofFilePath::getFileExt( filepath ) == "ofxhpgl" ) {
         ofBuffer tbuff;
         // set the paper size //
         stringstream tss;
@@ -155,7 +185,9 @@ bool ofxHPGL::save( string aFilePath ) {
             ofxHPGLCommand& tc = commands[i];
             stringstream ss;
             if( tc.type == ofxHPGLCommand::PEN ) {
-                ss<<"SP"<< tc.penIndex;//<<";";
+                ss<<"SP" << tc.penIndex;
+            } else if( tc.type == ofxHPGLCommand::PEN_VELOCITY ) {
+                ss<<"VS" << tc.penVelocity;
             } else if( tc.type == ofxHPGLCommand::RECTANGLE ) {
                 if( tc.bFilled ) {
                     ss<<"RA";
@@ -235,6 +267,7 @@ bool ofxHPGL::isConnected() {
 //--------------------------------------------------------------
 void ofxHPGL::update() {
     int eTimeMillis = ofGetElapsedTimeMillis();
+    float eTime = ofGetElapsedTimef();
     
     // try to connect to the serial if not connected //
     
@@ -248,56 +281,161 @@ void ofxHPGL::update() {
     }
     
     
-    // based on the printer buffer size avail ...
-    if( printerCommands.size() && !bPause ) {
-        // generally on the hp7475 it's 1024 bytes //
-        int availBuff = getAvailBufferSize();
-        if( availBuff > 16 ) {
-            int totalBytesToSend = 0;
-            string pcommandStr = "";
-            for( int i = 0; i < printerCommands.size(); i++ ) {
-                int tbytes = printerCommands[i].command.size();
-                if( tbytes + totalBytesToSend >= availBuff ) {
-                    break;
-                }
-                totalBytesToSend += tbytes;
-                pcommandStr += printerCommands[i].command;
-                printerCommands[i].bSent = true;
-            }
-            
-            if( totalBytesToSend > 0 && pcommandStr != "" ) {
-//                cout << "Sending printer commands: " << totalBytesToSend << " avail: " << availBuff << " num commands: " << printerCommands.size() << " | " << ofGetFrameNum() << endl;
-                sendCommand( pcommandStr );
-            }
+    _progressPct = 0.0;
+    if( _startNumPrinterCommands > 0 ) {
+        _progressPct = (( (float)_startNumPrinterCommands - (float)printerCommands.size() ) / (float)_startNumPrinterCommands);
+        if( printerCommands.size() == 0 ) {
+            _progressPct = 1.0;
         }
-        // clean up the sent commands //
-        ofRemove( printerCommands, shouldRemoveSentCommand );
     }
     
+//    cout << "printerCommands.size() " << printerCommands.size() << " progress: " << _progressPct << " start: " << _startNumPrinterCommands << " | " << ofGetFrameNum() << endl;
+    
+    
+    if( isPaused() ) {
+        _lastEstFinishedTimeGuess = eTime;
+    }
+    
+    // based on the printer buffer size avail ...
+    if( printerCommands.size() ) {
+        if( eTime - _lastEstFinishedTimeGuess >= 0.5 ) {
+            float tdiff = eTime - _lastEstFinishedTimeGuess;
+            
+            // now figure out the time per command to figure out a guess //
+            if( _lastEstNumPrinterCommands > 0 && _lastEstFinishedTimeGuess > 0.0 ) {
+                float timePerCmd = tdiff / (((float)_lastEstNumPrinterCommands - (float)printerCommands.size())+1.f);
+                _estFinishedTimes.push_back( timePerCmd );
+                if( _estFinishedTimes.size() > 500 ) {
+                    _estFinishedTimes.erase( _estFinishedTimes.begin() );
+                }
+//                cout << "Time Per Cmd: " << timePerCmd << " getEstTeim: " << getEstTimeRemaining() << " | " << ofGetFrameNum() << endl;
+            }
+            
+            _lastEstNumPrinterCommands = printerCommands.size();
+            _lastEstFinishedTimeGuess = eTime;
+        }
+    } else {
+        if( _startNumPrinterCommands ) {
+//            _progressPct = 1.0;
+            if( !_bPassedFinishEvent ) {
+                int temp=1;
+                ofNotifyEvent( PrintFinishEvent, temp, this );
+                _bPassedFinishEvent=true;
+                _endPrintTime = ofGetUnixTime();
+            }
+        }
+    }
+    
+    
+    int penChangeIndex = -1;
+    // based on the printer buffer size avail ...
+    if( printerCommands.size() && !isPaused() ) {
+        
+        if( _numPrinterCmdsToSkip > 0 ) {
+            if( isConnected() && ofGetFrameNum() % 2 == 0 ) {
+                sendCommand( "PU;" );
+            }
+            for( int i = 0; i < _numPrinterCmdsToSkip && i < printerCommands.size(); i++ ) {
+                printerCommands[i].bSent = true;
+            }
+            cout << "printer cmds: " << printerCommands.size() << " | " << ofGetFrameNum() << endl;
+        }
+        
+        //int terror = getError();
+        //cout << "Error: " << terror << endl;
+        
+        if( _numPrinterCmdsToSkip <= 0 ) {
+            // generally on the hp7475 it's 1024 bytes //
+            int availBuff = getAvailBufferSize();
+    //        cout << "availBuff: " << availBuff << " | " << ofGetFrameNum() << endl;
+    //        ofSleepMillis( 10 );
+            if( availBuff > 512 ) {
+                int totalBytesToSend = 0;
+                string pcommandStr = "";
+                for( int i = 0; i < printerCommands.size(); i++ ) {
+                    
+                    if( printerCommands[i].penIndex > -1 ) {
+                        printerCommands[i].bSent = true;
+                        penChangeIndex = printerCommands[i].penIndex;
+                        pause();
+                        break;
+                    }
+                    
+                    if( printerCommands[i].command == "" ) continue;
+                    
+                    int tbytes = printerCommands[i].command.size();
+                    if( tbytes + totalBytesToSend >= availBuff-512 ) {
+                        break;
+                    }
+                    totalBytesToSend += tbytes;
+                    printerCommands[i].bSent = true;
+                    
+                    pcommandStr += printerCommands[i].command;
+    //                cout << "Sending: " << printerCommands[i].command << " | " << ofGetFrameNum() << endl;
+    //                break;
+                }
+                
+                if( totalBytesToSend > 0 && pcommandStr != "" ) {
+                    cout << "Sending printer commands: " << totalBytesToSend << " avail: " << availBuff << " cmds left: " << printerCommands.size() << " | " << ofGetFrameNum() << endl;
+                    sendCommand( pcommandStr );
+                }
+            }
+        }
+    }
+    
+    // clean up the sent commands //
+    ofRemove( printerCommands, shouldRemoveSentCommand );
+    
+    if( penChangeIndex > -1 ) {
+        ofNotifyEvent( PenChangeEvent, penChangeIndex, this );
+    }
+    
+    _numPrinterCmdsToSkip=0;
 };
 
 //--------------------------------------------------------------
 void ofxHPGL::draw() {
-    for( int i = 0; i < drawPolys.size(); i++ ) {
-        drawPolys[i].draw();
-    }
+    ofRectangle screenRect( 0, 0, ofGetWidth(), ofGetHeight() );
+    ofRectangle frect( 0, 0, getInputWidth(), getInputHeight() );
+    frect.scaleTo( screenRect );
+    
+    ofPushMatrix(); {
+        ofTranslate( frect.x, frect.y );
+        ofRectangle trect( 0, 0, getInputWidth(), getInputHeight() );
+        float tscale = frect.getWidth() / trect.getWidth();
+        ofScale( tscale, tscale );
+    //    cout << "i: " << drawPolys.size() << " colors: " << drawColors.size() << " | " << ofGetFrameNum() << endl;
+        for( int i = 0; i < drawPolys.size(); i++ ) {
+            if( i < drawColors.size() ) ofSetColor( drawColors[i] );
+            drawPolys[i].draw();
+        }
+    } ofPopMatrix();
 }
 
 #pragma mark - Drawing Commands
 
 //--------------------------------------------------------------
 void ofxHPGL::circle( float ax, float ay, float aradius ) {
+    _checkInputDims();
+    
     ofPolyline tpoly;
     tpoly.arc( ofPoint( ax, ay, 0), aradius, aradius, 0, 360, 60 );
     
     drawPolys.push_back( tpoly );
+    drawColors.push_back( getPenColor(penIndex));
     ofxHPGLCommand tc;
     tc.circle( ax, ay, aradius );
-    commands.push_back( tc );
+    if( isCapturing() ) {
+        commands.push_back( tc );
+    } else {
+        _parseHPGLCommandToPrinterCommand( tc );
+    }
 }
 
 //--------------------------------------------------------------
 void ofxHPGL::rectangle( ofRectangle arect ) {
+    _checkInputDims();
+    
     ofPolyline tpoly;
     
     tpoly.addVertex( arect.getTopLeft() );
@@ -307,10 +445,15 @@ void ofxHPGL::rectangle( ofRectangle arect ) {
     tpoly.addVertex( arect.getTopLeft() );
     
     drawPolys.push_back( tpoly );
+    drawColors.push_back( getPenColor(penIndex));
     
     ofxHPGLCommand tc;
     tc.rectangle( arect.x, arect.y, arect.width, arect.height );
-    commands.push_back( tc );
+    if( isCapturing() ) {
+        commands.push_back( tc );
+    } else {
+        _parseHPGLCommandToPrinterCommand( tc );
+    }
 }
 
 //--------------------------------------------------------------
@@ -346,25 +489,93 @@ void ofxHPGL::triangle( ofVec2f ap1, ofVec2f ap2, ofVec2f ap3 ) {
 //--------------------------------------------------------------
 void ofxHPGL::polyline( ofPolyline aline ) {
     if( aline.size() < 2 ) return;
+    
+    _checkInputDims();
+    
     ofxHPGLCommand tcom( aline );
+    
+    ofFloatColor tcolor = getPenColor(penIndex);
+//    cout << drawPolys.size() << " colors: " << drawColors.size() << " color: " << tcolor << " penIndex: " << penIndex << endl;
+    
     drawPolys.push_back( aline );
-    commands.push_back( tcom );
+    drawColors.push_back( tcolor );
+    if( isCapturing() ) {
+        commands.push_back( tcom );
+    } else {
+        _parseHPGLCommandToPrinterCommand( tcom );
+    }
+}
+
+//--------------------------------------------------------------
+void ofxHPGL::setPenColor( int aPenNumber, ofColor aColor ) {
+    _checkInputDims();
+    // for visuals only. //
+    int tpenIndex = aPenNumber-1;
+    if( tpenIndex >= 0 && tpenIndex < penColors.size() ) {
+        penColors[ tpenIndex ] = aColor;
+    }
+}
+
+//--------------------------------------------------------------
+ofFloatColor ofxHPGL::getPenColor( int aPenNumber ) {
+    int tpenIndex = aPenNumber-1;
+    if( tpenIndex >= 0 && tpenIndex < penColors.size() ) {
+        return penColors[ tpenIndex ];
+    }
+    return ofFloatColor( 0.1 );
+}
+
+//--------------------------------------------------------------
+vector< ofFloatColor > ofxHPGL::getPenColors() {
+    return penColors;
 }
 
 //--------------------------------------------------------------
 void ofxHPGL::setPen( int aPenIndex ) {
-    if( aPenIndex < 1 || aPenIndex > 6 ) {
-        ofLogWarning("ofxHPGL :: setPen : pen index ( "+ofToString( aPenIndex,0)+" ) is out of range (0-6)" );
-        return;
+    //_checkInputDims();
+    
+//    if( aPenIndex < 0 || aPenIndex > 6 ) {
+//        cout << ("ofxHPGL :: setPen : pen index ( "+ofToString( aPenIndex,0)+" ) is out of range (0-6)" ) << endl;
+//        return;
+//    }
+    
+    if( aPenIndex >= 0 ) {
+        if( penIndex == aPenIndex ) {
+            return;
+        }
     }
     
     cout << "setting the pen to " << aPenIndex << endl;
     
-    if( aPenIndex != penIndex ) {
-        penIndex = aPenIndex;
-        ofxHPGLCommand com;
-        com.setPen( penIndex );
+    penIndex = aPenIndex;
+    ofxHPGLCommand com;
+    com.setPen( penIndex );
+    
+    if( isCapturing() ) {
         commands.push_back( com );
+    } else {
+        sendCommand( getCommand("SP", com.penIndex ) );
+//        sendCommands( _parseHPGLCommandToPrinterCommand(com) );
+    }
+}
+
+//--------------------------------------------------------------
+void ofxHPGL::setPenVelocity( float aVel ) {
+    
+    // if we are printing, then send it immediately //
+//    string outCommand = getCommand("VS", ofMap(aVel, 0.0, 1.0, 0.0, 38, true ));
+//    if( aVel < 0 ) {
+//        outCommand = "VS;";
+//    }
+    
+    ofxHPGLCommand tcom;
+    tcom.setPenVelocity( aVel );
+    
+    if( isCapturing() ) {
+        commands.push_back( tcom );
+    } else {
+        // send the commands immediately //
+        sendCommands( _parseHPGLCommandToPrinterCommand( tcom ) );
     }
 }
 
@@ -374,7 +585,7 @@ void ofxHPGL::setPaperSize( int aPaperSize ) {
     // clear the clip rect, so when we query it later, it has adjusted to the new paper size //
     _clipLimitRect.setWidth( 0 );
     _clipLimitRect.setHeight( 0 );
-    sendCommand( getCommand( "PS", aPaperSize ) );
+    sendCommand( getCommand( "PS", aPaperSize ));
 }
 
 //--------------------------------------------------------------
@@ -395,12 +606,25 @@ ofVec2f ofxHPGL::getPrinterPosFromInput( ofVec2f aInput, ofRectangle& aDestRect 
 }
 
 //--------------------------------------------------------------
+void ofxHPGL::skip( int aNumCmdsToSkip ) {
+    _numPrinterCmdsToSkip = aNumCmdsToSkip;
+}
+
+//--------------------------------------------------------------
 void ofxHPGL::clear() {
     penIndex = -1;
     commands.clear();
     printerCommands.clear();
     drawPolys.clear();
-    sendCommand( "PU;" );
+    drawColors.clear();
+    _startPrintTime = 0;
+    _endPrintTime = 0;
+    _progressPct = 0;
+    _bPassedFinishEvent=false;
+    _startNumPrinterCommands=0;
+    if( isConnected() ) {
+        sendCommand( "PU;" );
+    }
 }
 
 // http://www.piclist.com/techref/language/hpgl/commands.htm
@@ -412,19 +636,66 @@ void ofxHPGL::print() {
     }
     
     if( serial.isInitialized() ) {
-        serial.flush( false, true );
+        serial.flush( true, true );
     }
     
     resume();
     
+    _estFinishedTimes.clear();
+    _lastEstFinishedTimeGuess   = -100;
+    _lastEstNumPrinterCommands  = 0;
+    _progressPct                = 0.0;
+    _bPassedFinishEvent         = false;
+    _startPrintTime             = ofGetUnixTime();
+    _endPrintTime               = 0;
+    
 //    cout << "Sending to print : " << commands.size() << " | " << ofGetFrameNum() << endl;
     
     // clear the incoming commands to the printer //
-    addCommand("IN;");
+//    addPrinterCommand("IN;");
+//    addPrinterCommand("PA;");
+//    addPrinterCommand("IM128;");
+//    addPrinterCommand("DC;");
+    
+    addPrinterCommand( "IN;" );
+//    addPrinterCommand( "RO;" );
+//    addPrinterCommand( "IP;" );
+//    addPrinterCommand( "DF;" );
+    
+    // set no echo //
+    // 27 == 'ESC'
+    // carriage return = 13
+    // line feed = 10
+    // 3 terminates labels I think
+//    string noEchoStr;
+//    noEchoStr.push_back( 27 );
+//    noEchoStr.push_back('.');
+//    noEchoStr.push_back('M');
+//    noEchoStr.push_back('0');
+//    noEchoStr.push_back(';');
+//    noEchoStr.push_back('0');
+//    noEchoStr.push_back(';');
+//    noEchoStr.push_back('0');
+//    noEchoStr.push_back(';');
+//    noEchoStr.push_back('1');
+//    noEchoStr.push_back('3');
+//    noEchoStr.push_back(':');
+//    addPrinterCommand( noEchoStr );
+    
+    
+    
+//    string tstr;
+//    tstr.resize( 4 );
+//    tstr[0] = 27;
+//    tstr[1] = '.';
+//    tstr[2] = '@';
+//    sendCommand( tstr );
+    
+//    addPrinterCommand("IM0;");
 //    addCommand("DF;");
 //    addCommand("PU;");
 //    addCommand("SC;");
-    addCommand("PA;");
+//    addPrinterCommand("PA;");
 //    addCommand( getCommand("PS", 1 ));
     
     // make sure to set the pen //
@@ -440,76 +711,71 @@ void ofxHPGL::print() {
     
     cout << "dest Rect: " << destRect << endl;
     
-    float dscalex = destRect.width / _inWidth;
-    float dscaley = destRect.height / _inHeight;
+//    float dscalex = destRect.width / _inWidth;
+//    float dscaley = destRect.height / _inHeight;
 //    addCommand( getCommand("SP", penIndex ));
     
     for( int i = 0; i < commands.size(); i++ ) {
         ofxHPGLCommand& com = commands[i];
-        if( com.type == ofxHPGLCommand::SHAPE ) {
-            ofPolyline& cpoly = com.polyline;
-            vector< ofPoint > verts = cpoly.getVertices();
-            
-            bool bAdd = verts.size() >= 2;
-            if( bAdd ) {
-                if( verts[0].x < 0  || verts[0].y < 0 || verts[0].x > _inWidth || verts[0].y > _inHeight ) {
-                    bAdd = false;
-                }
-                if( verts.back().x < 0  || verts.back().y < 0 || verts.back().x > _inWidth || verts.back().y > _inHeight ) {
-                    bAdd = false;
-                }
-            }
-            if( !bAdd ) continue;
-            
-            for( int j = 0; j < verts.size(); j++ ) {
-                // move the verts into the right place for the plotter //
-//                ofVec2f nvert;
-//                nvert.x = ofMap( verts[j].x, 0, _inWidth, destRect.width, 0, true );
-//                nvert.x = ofMap( verts[j].x, 0, _inWidth, 0, destRect.width, true );
-//                nvert.y = ofMap( verts[j].y, 0, _inHeight, destRect.height, 0, true );
-                
-                ofVec2f nvert = getPrinterPosFromInput( verts[j], destRect );
-                
-                if( j == 0 ) {
-                    addCommand(getCommand("PU", nvert.x, nvert.y ));
-                }
-//                if( verts[j].x < 0  || verts[j].y < 0 || verts[j].x > _inWidth || verts[j].y > _inHeight ) {
-//                    addCommand( "PU;" );
-//                } else {
-                    
-//                    cout << "inpos: "<< verts[j] << " outpos: " << nvert << " dest rect: " << destRect << " inw: " << _inWidth << " x " << _inHeight << endl;
-                
-                    addCommand(getCommand("PD", nvert.x, nvert.y ));
-//                }
-                
-//                ofDrawLine( verts[j].x, verts[j].y, verts[j+1].x, verts[j+1].y );
-            }
-            addCommand("PU;");
-        } else if( com.type == ofxHPGLCommand::PEN ) {
-            cout << i << " - Setting the pen to " << com.penIndex << endl;
-            addCommand( getCommand("SP", com.penIndex ));
-        } else if( com.type == ofxHPGLCommand::CIRCLE ) {
-//            PU1500,1500;
-//            CI500;
-            // circle filled // ss<<"WG"<<tc.radius<<","<<0<<","<<360<<","<<5;
-            
-            ofVec2f nvert = getPrinterPosFromInput( ofVec2f(com.pos.x, com.pos.y), destRect );
-            addCommand( getCommand("PU", nvert.x, nvert.y ));
-            addCommand( getCommand("CI", com.radius*dscalex ));
-            addCommand("PU;");
-        } else if( com.type == ofxHPGLCommand::RECTANGLE ) {
-//            RA (Rectangle Absolute - Filled, from current position to diagonal x,y):
-//            EA (rEctangle Absolute - Unfilled, from current position to diagonal x,y):
-//            EA x, y;
-            ofVec2f nvert = getPrinterPosFromInput( ofVec2f(com.pos.x, com.pos.y), destRect );
-            addCommand( getCommand("PU", nvert.x, nvert.y ));
-            addCommand( getCommand("EA", nvert.x+com.width*dscalex, nvert.y+com.height*dscaley ));
-            addCommand( "PU;" );
+        vector< ofxHPGLSerialCommand > serialCmds = _parseHPGLCommandToPrinterCommand( com );
+        if( serialCmds.size() ) {
+            addPrinterCommands( serialCmds );
         }
+        
+//        if( com.type == ofxHPGLCommand::SHAPE ) {
+//            ofPolyline& cpoly = com.polyline;
+//            vector< ofPoint > verts = cpoly.getVertices();
+//            if( verts.size() < 2 ) continue;
+//            
+//            bool bSetPenUp = true;
+//            
+//            for( int j = 0; j < verts.size(); j++ ) {
+//                // move the verts into the right place for the plotter //
+//                if( verts[j].x < 0  || verts[j].y < 0 || verts[j].x > _inWidth || verts[j].y > _inHeight ) {
+//                    bSetPenUp = true;
+////                    addCommand("PU;");
+//                    continue;
+//                }
+//                
+//                ofVec2f nvert = getPrinterPosFromInput( verts[j], destRect );
+//                
+//                if( bSetPenUp ) {
+//                    addCommand(getCommand("PU", nvert.x, nvert.y ));
+//                    bSetPenUp = false;
+//                }
+//                
+//                addCommand(getCommand("PD", nvert.x, nvert.y ));
+//            }
+//            addCommand("PU;");
+//        } else if( com.type == ofxHPGLCommand::PEN ) {
+//            cout << i << " - Setting the pen to " << com.penIndex << endl;
+//            addCommand( getCommand("SP", com.penIndex ));
+//        } else if( com.type == ofxHPGLCommand::CIRCLE ) {
+////            PU1500,1500;
+////            CI500;
+//            // circle filled // ss<<"WG"<<tc.radius<<","<<0<<","<<360<<","<<5;
+//            
+//            ofVec2f nvert = getPrinterPosFromInput( ofVec2f(com.pos.x, com.pos.y), destRect );
+//            addCommand( getCommand("PU", nvert.x, nvert.y ));
+//            addCommand( getCommand("CI", com.radius*dscalex ));
+//            addCommand("PU;");
+//        } else if( com.type == ofxHPGLCommand::RECTANGLE ) {
+////            RA (Rectangle Absolute - Filled, from current position to diagonal x,y):
+////            EA (rEctangle Absolute - Unfilled, from current position to diagonal x,y):
+////            EA x, y;
+//            ofVec2f nvert = getPrinterPosFromInput( ofVec2f(com.pos.x, com.pos.y), destRect );
+//            addCommand( getCommand("PU", nvert.x, nvert.y ));
+//            addCommand( getCommand("EA", nvert.x+com.width*dscalex, nvert.y+com.height*dscaley ));
+//            addCommand( "PU;" );
+//        } else if( com.type == ofxHPGLCommand::STRING_COMMAND ) {
+//            addCommand( com.strCommand );
+//        }
     }
     
-    addCommand("PU;");
+    addPrinterCommand("PU;");
     
+    _startNumPrinterCommands = printerCommands.size();
+    cout << "printerCommands size(): " << printerCommands.size() << " num commands: " << commands.size() << endl;
     
 //    clear();
 //    string pstring = "";
@@ -540,6 +806,8 @@ void ofxHPGL::print() {
     // p2 15722, 10259
     // xaxis max 0 to 16640
     // yaxis max 0 to 10365
+    // xaxis max 0 to 16158
+    // yaxis max 0 to 11040
     
     
     
@@ -582,6 +850,26 @@ void ofxHPGL::resume() {
 }
 
 //--------------------------------------------------------------
+bool ofxHPGL::isPaused() {
+    return bPause;
+}
+
+//--------------------------------------------------------------
+void ofxHPGL::enableCapture() {
+    _bCapturing = true;
+}
+
+//--------------------------------------------------------------
+void ofxHPGL::disableCapture() {
+    _bCapturing = false;
+}
+
+//--------------------------------------------------------------
+bool ofxHPGL::isCapturing() {
+    return _bCapturing;
+}
+
+//--------------------------------------------------------------
 ofVec2f ofxHPGL::getPenPosition() {
     ofVec2f tpos;
     ofxHPGLSerialCommand com;
@@ -614,9 +902,12 @@ int ofxHPGL::getPenStatus() {
 //--------------------------------------------------------------
 ofRectangle ofxHPGL::getHardClipLimits() {
     
+    _checkInputDims();
+    
     if( _clipLimitRect.width > 0 && _clipLimitRect.height > 0 ) {
         return _clipLimitRect;
     }
+    
     
     ofRectangle trect;
     ofxHPGLSerialCommand com;
@@ -626,18 +917,137 @@ ofRectangle ofxHPGL::getHardClipLimits() {
         vector< string > tstrings = ofSplitString( com.printerResponse, "," );
         if( tstrings.size() == 4 ) {
             trect.set( ofToInt(tstrings[0]), ofToInt(tstrings[1]), ofToInt(tstrings[2]), ofToInt(tstrings[3]) );
+            _clipLimitRect = trect;
+            cout << "Getting hard clip limits: " << _clipLimitRect << endl;
         }
     }
     return trect;
 }
 
 //--------------------------------------------------------------
-void ofxHPGL::addCommand( string astr ) {
+float ofxHPGL::getProgress() {
+    return _progressPct;
+}
+
+//--------------------------------------------------------------
+float ofxHPGL::getEstTimeRemaining() {
+    float tnumToAvg = (float)_estFinishedTimes.size();
+    if( tnumToAvg < 1 ) return 0;
+    float totesAvg = 0.0;
+    for( int i = 0; i < tnumToAvg; i++ ) {
+        totesAvg += _estFinishedTimes[i];
+    }
+    return (totesAvg / tnumToAvg ) * (float)getNumPrinterCommands();
+}
+
+//--------------------------------------------------------------
+string ofxHPGL::getEstTimeRemaintingFormatted() {
+//    days = input_seconds / 60 / 60 / 24;
+    int tsecs   = getEstTimeRemaining();
+    //int days    = tsecs / 60 / 60 / 24;
+    int hours   = (tsecs / 60 / 60);// % 24;
+    int minutes = (tsecs / 60) % 60;
+    int seconds = tsecs % 60;
+    return getTimeNumberString( hours )+" : " +getTimeNumberString(minutes) + " : " +getTimeNumberString(seconds);
+}
+
+//--------------------------------------------------------------
+string ofxHPGL::getTotalPrintTimeFormatted() {
+    uint64_t ctime = _endPrintTime;
+    if( ctime <= 0 ) {
+        ctime = ofGetUnixTime();
+    }
+    uint64_t stime = _startPrintTime;
+    int tsecs = (ctime - stime);// / 1000;
+    if( stime <= 0 ) tsecs = 0;
     
+//    cout << "stime: " << stime << " etime: " << ctime << " | " << ofGetFrameNum() << endl;
+    
+//    int days    = tsecs / 60 / 60 / 24;
+    int hours   = (tsecs / 60 / 60);// % 24;
+    int minutes = (tsecs / 60) % 60;
+    int seconds = tsecs % 60;
+    return getTimeNumberString( hours )+" : " +getTimeNumberString(minutes) + " : " +getTimeNumberString(seconds);
+}
+
+//--------------------------------------------------------------
+string ofxHPGL::getTimeNumberString( int anum ) {
+    string tstr = ofToString( anum, 0 );
+    if( anum < 10 ) {
+        tstr = "0"+tstr;
+    }
+    return tstr;
+}
+
+//--------------------------------------------------------------
+int ofxHPGL::getError() {
+    
+//    ofxHPGLSerialCommand com;
+//    com.command = "OE;";
+    
+    
+    ofxHPGLSerialCommand com;
+    com.sent();
+    string tstr;
+    tstr.resize( 4 );
+    tstr[0] = 27;
+    tstr[1] = '.';
+    tstr[2] = 'E';
+    tstr[3] = ';';
+    com.command = tstr;
+    
+//    cout << "avail buff: " << getAvailBufferSize() << endl;
+    
+    
+//    sendBlockingResponse( com );
+//    if( com.didReceiveResponse() ) {
+//        cout << "ofxHPGL getError : " << com.printerResponse << " | " << ofGetFrameNum() << endl;
+//        int terror = ofToInt( com.printerResponse );
+////        return terror;
+////        vector< string > tstrings = ofSplitString( com.printerResponse, "," );
+////        if( tstrings.size() == 4 ) {
+////            
+////        }
+//    }
+    
+    ofxHPGLSerialCommand tcom;
+    tcom.command = "OE;";
+    sendBlockingResponse( tcom );
+    if( tcom.didReceiveResponse() ) {
+        cout << "ofxHPGL getError : " << tcom.printerResponse << " | " << ofGetFrameNum() << endl;
+        int terror = ofToInt( tcom.printerResponse );
+        return terror;
+//        vector< string > tstrings = ofSplitString( com.printerResponse, "," );
+//        if( tstrings.size() == 4 ) {
+//
+//        }
+    }
+    
+//    ofxHPGLSerialCommand tstat;
+//    tstat.command = "OS;";
+//    sendBlockingResponse( tstat );
+//    if( tstat.didReceiveResponse() ) {
+//        cout << "ofxHPGL status : " << tstat.printerResponse << " | " << ofGetFrameNum() << endl;
+//        int terror = ofToInt( tstat.printerResponse );
+//    }
+    
+    
+//    sendCommand( "IN;" );
+    
+    return -1;
+}
+
+//--------------------------------------------------------------
+void ofxHPGL::addPrinterCommand( string astr ) {
     ofxHPGLSerialCommand com;
     com.command = astr;
     printerCommands.push_back( com );
-    
+}
+
+//--------------------------------------------------------------
+void ofxHPGL::addPrinterCommands( vector< ofxHPGLSerialCommand > aCmds ) {
+    if( !aCmds.size() ) return;
+    printerCommands.insert( printerCommands.end(), aCmds.begin(), aCmds.end() );
 }
 
 //--------------------------------------------------------------
@@ -661,7 +1071,9 @@ int ofxHPGL::getAvailBufferSize() {
 
 //--------------------------------------------------------------
 void ofxHPGL::sendBlockingResponse( ofxHPGLSerialCommand& aCommand ) {
+    if( !isConnected() ) return;
     aCommand.sent();
+    
     sendCommand( aCommand.command );
     int tnumCountTries = 0;
     string tserialIn = "";
@@ -671,7 +1083,8 @@ void ofxHPGL::sendBlockingResponse( ofxHPGLSerialCommand& aCommand ) {
             
             unsigned char buffer[1];
             while( serial.readBytes( buffer, 1) > 0){
-                if (buffer[0] == '\n' || buffer[0] == '\r' || buffer[0] == '\t') {
+                if (buffer[0] == '\n' || buffer[0] == '\r' || buffer[0] == '\t' || buffer[0] == 13) {
+//                    cout << "received an escape character " << endl;
                     aCommand.received( tserialIn );
                     tserialIn = "";
                     break;
@@ -680,7 +1093,7 @@ void ofxHPGL::sendBlockingResponse( ofxHPGLSerialCommand& aCommand ) {
             };
         }
         tnumCountTries++;
-        ofSleepMillis( 2 );
+        ofSleepMillis( 10 );
     }
 }
 
@@ -710,6 +1123,7 @@ string ofxHPGL::getCommand( string aprefix, int ax, int ay ) {
 void ofxHPGL::sendCommand( string astr ) {
     if( !astr.length() ) return;
     if( serial.isInitialized() ) {
+        cout << "Sending command: " << astr << endl;
         unsigned char buf[ (int)astr.size() ];
         for( int i = 0; i < astr.size(); i++ ) {
             buf[ i ] = astr[i];
@@ -718,7 +1132,93 @@ void ofxHPGL::sendCommand( string astr ) {
     } else {
         cout << "serial not initialized " << endl;
     }
+}
+
+//--------------------------------------------------------------
+void ofxHPGL::sendCommands( vector< ofxHPGLSerialCommand > aCmds ) {
+    for( auto& sc : aCmds ) {
+        sendCommand( sc.command );
+    }
+}
+
+//--------------------------------------------------------------
+vector< ofxHPGLSerialCommand > ofxHPGL::_parseHPGLCommandToPrinterCommand( ofxHPGLCommand& aCommand ) {
+    vector< ofxHPGLSerialCommand > returnCommands;
     
+    ofRectangle destRect = getHardClipLimits();
+    float dscalex = destRect.width / _inWidth;
+    float dscaley = destRect.height / _inHeight;
+    
+    if( aCommand.type == ofxHPGLCommand::SHAPE ) {
+        ofPolyline& cpoly = aCommand.polyline;
+        vector< ofPoint > verts = cpoly.getVertices();
+        if( verts.size() < 2 ) {
+            ofLogWarning() << "_parseHPGLCommandToPrinterCommand :: SHAPE : num verts less than 2 ";
+            return returnCommands;
+        }
+        
+        bool bSetPenUp = true;
+        
+        for( int j = 0; j < verts.size(); j++ ) {
+            // move the verts into the right place for the plotter //
+            if( verts[j].x < 0  || verts[j].y < 0 || verts[j].x > _inWidth || verts[j].y > _inHeight ) {
+                bSetPenUp = true;
+                continue;
+            }
+            
+            ofVec2f nvert = getPrinterPosFromInput( verts[j], destRect );
+            if( bSetPenUp ) {
+                returnCommands.push_back(ofxHPGLSerialCommand(getCommand("PU", nvert.x, nvert.y )));
+                bSetPenUp = false;
+            }
+            returnCommands.push_back(ofxHPGLSerialCommand(getCommand("PD", nvert.x, nvert.y )));
+        }
+        returnCommands.push_back(ofxHPGLSerialCommand("PU;") );
+    } else if( aCommand.type == ofxHPGLCommand::PEN ) {
+//        cout << i << " - Setting the pen to " << com.penIndex << endl;
+//        if( aCommand.penIndex < 1 ) {
+////            returnCommands.push_back( ofxHPGLSerialCommand( "SP;" ));
+//        } else {
+//            returnCommands.push_back( ofxHPGLSerialCommand( getCommand("SP", aCommand.penIndex ) ));
+        returnCommands.push_back( ofxHPGLSerialCommand(""));
+        returnCommands.back().penIndex = aCommand.penIndex;
+//        }
+    } else if( aCommand.type == ofxHPGLCommand::CIRCLE ) {
+//            PU1500,1500;
+//            CI500;
+// circle filled // ss<<"WG"<<tc.radius<<","<<0<<","<<360<<","<<5;
+        ofVec2f nvert = getPrinterPosFromInput( ofVec2f( aCommand.pos.x, aCommand.pos.y), destRect );
+        returnCommands.push_back( ofxHPGLSerialCommand( getCommand("PU", nvert.x, nvert.y )));
+        returnCommands.push_back( ofxHPGLSerialCommand( getCommand("CI", aCommand.radius*dscalex )));
+        returnCommands.push_back( ofxHPGLSerialCommand("PU;"));
+    } else if( aCommand.type == ofxHPGLCommand::RECTANGLE ) {
+//            RA (Rectangle Absolute - Filled, from current position to diagonal x,y):
+//            EA (rEctangle Absolute - Unfilled, from current position to diagonal x,y):
+//            EA x, y;
+        ofVec2f nvert = getPrinterPosFromInput( ofVec2f(aCommand.pos.x, aCommand.pos.y), destRect );
+        returnCommands.push_back( ofxHPGLSerialCommand( getCommand("PU", nvert.x, nvert.y )));
+        returnCommands.push_back( ofxHPGLSerialCommand( getCommand("EA", nvert.x+aCommand.width*dscalex, nvert.y+aCommand.height*dscaley )));
+        returnCommands.push_back( ofxHPGLSerialCommand( "PU;" ));
+    } else if( aCommand.type == ofxHPGLCommand::STRING_COMMAND ) {
+        returnCommands.push_back( ofxHPGLSerialCommand( aCommand.strCommand ));
+    } else if( aCommand.type == ofxHPGLCommand::PEN_VELOCITY ) {
+        string outCommand = getCommand("VS", ofMap( aCommand.penVelocity, 0.0, 1.0, 0.0, 38, true ));
+        if( aCommand.penVelocity < 0 ) {
+            outCommand = "VS;";
+        }
+        returnCommands.push_back( ofxHPGLSerialCommand( outCommand ));
+    }
+    return returnCommands;
+}
+
+//--------------------------------------------------------------
+void ofxHPGL::_checkInputDims() {
+    if( _inWidth < 0 ) {
+        _inWidth = ofGetWidth();
+    }
+    if( _inHeight < 0 ) {
+        _inHeight = ofGetHeight();
+    }
 }
 
 
