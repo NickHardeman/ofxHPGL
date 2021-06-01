@@ -396,6 +396,12 @@ void ofxHPGL::update() {
 //--------------------------------------------------------------
 void ofxHPGL::draw() {
     ofRectangle screenRect( 0, 0, ofGetWidth(), ofGetHeight() );
+    draw( screenRect );
+}
+
+//--------------------------------------------------------------
+void ofxHPGL::draw( ofRectangle abounds ) {
+    ofRectangle screenRect = abounds;
     ofRectangle frect( 0, 0, getInputWidth(), getInputHeight() );
     frect.scaleTo( screenRect );
     
@@ -404,7 +410,7 @@ void ofxHPGL::draw() {
         ofRectangle trect( 0, 0, getInputWidth(), getInputHeight() );
         float tscale = frect.getWidth() / trect.getWidth();
         ofScale( tscale, tscale );
-    //    cout << "i: " << drawPolys.size() << " colors: " << drawColors.size() << " | " << ofGetFrameNum() << endl;
+        //    cout << "i: " << drawPolys.size() << " colors: " << drawColors.size() << " | " << ofGetFrameNum() << endl;
         for( int i = 0; i < drawPolys.size(); i++ ) {
             if( i < drawColors.size() ) ofSetColor( drawColors[i] );
             drawPolys[i].draw();
@@ -478,10 +484,10 @@ void ofxHPGL::triangle( float ax, float ay, float ax2, float ay2, float ax3, flo
 //--------------------------------------------------------------
 void ofxHPGL::triangle( ofVec2f ap1, ofVec2f ap2, ofVec2f ap3 ) {
     ofPolyline tpoly;
-    tpoly.addVertex( ap1 );
-    tpoly.addVertex( ap2 );
-    tpoly.addVertex( ap3 );
-    tpoly.addVertex( ap1 );
+    tpoly.addVertex( ap1.x, ap1.y );
+    tpoly.addVertex( ap2.x, ap2.y );
+    tpoly.addVertex( ap3.x, ap3.y );
+    tpoly.addVertex( ap1.x, ap1.y );
     
     polyline( tpoly );
 }
@@ -870,6 +876,35 @@ bool ofxHPGL::isCapturing() {
 }
 
 //--------------------------------------------------------------
+void ofxHPGL::rotateCommandsNeg90() {
+//    vector< ofxHPGLCommand > commands;
+//    vector< ofPolyline > drawPolys;
+    float pw = getInputWidth();
+    float ph = getInputHeight();
+    
+    setInputHeight( pw );
+    setInputWidth( ph );
+    
+    for( auto& cmd : commands ) {
+        cmd.pos.rotate( -90 );
+        cmd.pos.y += _inHeight;
+        
+        for(auto& v : cmd.polyline.getVertices() ) {
+//            v.rotate( -90, ofVec3f(0,0,1));
+            v = glm::angleAxis( ofDegToRad(-90.f), glm::vec3(0,0,1)) * v;
+            v.y += _inHeight;
+        }
+    }
+    for( auto& dp : drawPolys ) {
+        for( auto& v : dp.getVertices() ) {
+//            v.rotate( -90, ofVec3f(0,0,1) );
+            v = glm::angleAxis( ofDegToRad(-90.f), glm::vec3(0,0,1)) * v;
+            v.y += _inHeight;
+        }
+    }
+}
+
+//--------------------------------------------------------------
 ofVec2f ofxHPGL::getPenPosition() {
     ofVec2f tpos;
     ofxHPGLSerialCommand com;
@@ -1151,7 +1186,7 @@ vector< ofxHPGLSerialCommand > ofxHPGL::_parseHPGLCommandToPrinterCommand( ofxHP
     
     if( aCommand.type == ofxHPGLCommand::SHAPE ) {
         ofPolyline& cpoly = aCommand.polyline;
-        vector< ofPoint > verts = cpoly.getVertices();
+        vector< glm::vec3 > verts = cpoly.getVertices();
         if( verts.size() < 2 ) {
             ofLogWarning() << "_parseHPGLCommandToPrinterCommand :: SHAPE : num verts less than 2 ";
             return returnCommands;

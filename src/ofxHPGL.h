@@ -123,8 +123,8 @@ public:
     class Settings {
     public:
         enum PaperSize {
-            PAPER_SIZE_A3 = 1,
-            PAPER_SIZE_A4 = 4
+            PAPER_SIZE_A3 = 1, // 297 x 420 mm | 11.7 x 16.5 in
+            PAPER_SIZE_A4 = 4 // 210 x 297 mm | 8.3 x 11.7 in
         };
         
         Settings();
@@ -157,6 +157,7 @@ public:
     
     void update();
     void draw();
+    void draw( ofRectangle abounds );
     
     void circle( float ax, float ay, float aradius );
     void rectangle( ofRectangle arect );
@@ -190,6 +191,8 @@ public:
     void enableCapture();
     void disableCapture();
     bool isCapturing();
+    
+    void rotateCommandsNeg90();
     
     ofVec2f getPenPosition();
     int getPenStatus();
