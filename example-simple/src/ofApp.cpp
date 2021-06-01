@@ -4,6 +4,8 @@
 void ofApp::setup() {
     hp.setup( "/dev/tty.usbserial-A10172HG" );
     
+    ofBackground(200);
+    
     // notice in the main.cpp file that the window dimensions are the same ratio as 11x17
     // if you want to change the input width or height ( defaults to window dimensions) //
     // be sure to call setInputWidth and setInputHeight to the width and height
@@ -47,7 +49,7 @@ void ofApp::keyPressed(int key){
         hp.clear();
         hp.print();
     }
-    if( key == 127 ) {
+    if( key == 127 || key == OF_KEY_DEL || key == 8 ) {
         polyline.clear();
         hp.clear();
     }
