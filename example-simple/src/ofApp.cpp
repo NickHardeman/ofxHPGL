@@ -46,7 +46,7 @@ void ofApp::draw(){
 //--------------------------------------------------------------
 void ofApp::keyPressed(int key){
     if( key == 'p' ) {
-        hp.clear();
+        //hp.clear();
         hp.print();
     }
     if( key == 127 || key == OF_KEY_DEL || key == 8 ) {
@@ -69,7 +69,7 @@ void ofApp::mouseMoved(int x, int y){
 }
 
 //--------------------------------------------------------------
-void ofApp::mouseDragged(int x, int y, int button){
+void ofApp::mouseDragged(int x, int y, int button) {
     polyline.addVertex( x, y );
 }
 
@@ -82,9 +82,10 @@ void ofApp::mousePressed(int x, int y, int button) {
 void ofApp::mouseReleased(int x, int y, int button){
     if( polyline.getPerimeter() > 10 ) {
         polyline = polyline.getResampledBySpacing( 8 );
-        
+        hp.enableCapture();
         hp.polyline( polyline );
         polyline.clear();
+        hp.disableCapture();
     }
 }
 
